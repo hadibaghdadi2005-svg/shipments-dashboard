@@ -105,8 +105,8 @@
 <div id="authScreen" class="authwrap">
   <div class="authcard">
     <h1>Dock manifest</h1>
-    <p id="authSubtitle">Sign in with the account your admin created for you.</p>
-    <div class="field"><label>Email</label><input type="email" id="authEmail" autocomplete="username"></div>
+    <p id="authSubtitle">Sign in with the username and password your admin created for you.</p>
+    <div class="field"><label>Username</label><input type="text" id="authEmail" autocomplete="username"></div>
     <div class="field"><label>Password</label><input type="password" id="authPassword" autocomplete="current-password"></div>
     <div class="err" id="authErr"></div>
     <button class="btn" id="signInBtn" style="width:100%;">Sign in</button>
@@ -134,14 +134,14 @@
     <div class="panel-head"><h2>Admin — accounts</h2><button class="btn secondary small" id="closeAdmin">Close</button></div>
     <div class="panel-body">
       <div class="form-grid" style="align-items:end;margin-bottom:14px;">
-        <div class="field"><label>New staff email</label><input type="email" id="newEmail"></div>
+        <div class="field"><label>New staff username</label><input type="text" id="newEmail" placeholder="e.g. jsmith"></div>
         <div class="field"><label>Temporary password</label><input type="text" id="newPassword" placeholder="min 6 characters"></div>
         <div class="field"><label>Role</label><select id="newRole"><option value="staff">Staff</option><option value="admin">Admin</option></select></div>
         <div class="field"><button class="btn" id="createUserBtn" style="width:100%;">Create account</button></div>
       </div>
       <div class="err" id="adminErr"></div>
       <table class="adminlist">
-        <thead><tr><th>Status</th><th>Email</th><th>Role</th><th>Last active</th><th></th></tr></thead>
+        <thead><tr><th>Status</th><th>Username</th><th>Role</th><th>Last active</th><th></th></tr></thead>
         <tbody id="adminTbody"></tbody>
       </table>
     </div>
@@ -200,9 +200,11 @@
 <div id="toast"></div>
 
 <script>
-const SUPABASE_URL = 'https://vsmihhipjmrapwcupmcx.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZzbWloaGlwam1yYXB3Y3VwbWN4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc3MzM3MzUsImV4cCI6MjEwMzMwOTczNX0.bfoa8YPerJMTRtlIJHDZuWofEHdW9f0v0GBIuYK2I98';
+const SUPABASE_URL = 'https://lutkzzxsmudnfaitqlfy.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx1dGt6enhzbXVkbmZhaXRxbGZ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgzNDIxODIsImV4cCI6MjEwMzkxODE4Mn0.S_PLikyoMfddXc5pG74Oy0vywjdlk0uxNa126i9_7Nc';
 const ADMIN_FN_URL = SUPABASE_URL + '/functions/v1/admin-users';
+const SYNTH_DOMAIN = 'workers.dockmanifest.internal';
+function usernameToEmail(u){ return String(u).trim().toLowerCase().replace(/[^a-z0-9._-]/g,'') + '@' + SYNTH_DOMAIN; }
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let me = null;       // {id, email, role, is_active}
@@ -232,11 +234,11 @@ document.getElementById('signInBtn').addEventListener('click', signIn);
 async function signIn(){
   const errEl = document.getElementById('authErr');
   errEl.classList.remove('show');
-  const email = document.getElementById('authEmail').value.trim();
+  const username = document.getElementById('authEmail').value.trim();
   const password = document.getElementById('authPassword').value;
-  if(!email || !password){ errEl.textContent='Enter your email and password.'; errEl.classList.add('show'); return; }
-  const { data, error } = await sb.auth.signInWithPassword({ email, password });
-  if(error){ errEl.textContent = 'Sign-in failed: '+error.message; errEl.classList.add('show'); return; }
+  if(!username || !password){ errEl.textContent='Enter your username and password.'; errEl.classList.add('show'); return; }
+  const { data, error } = await sb.auth.signInWithPassword({ email: usernameToEmail(username), password });
+  if(error){ errEl.textContent = 'Sign-in failed. Check your username and password.'; errEl.classList.add('show'); return; }
   await afterSignIn(data.session);
 }
 
@@ -249,10 +251,10 @@ async function afterSignIn(session){
     await sb.auth.signOut();
     return;
   }
-  me = { id: profile.id, email: profile.email, role: profile.role, is_active: profile.is_active };
+  me = { id: profile.id, username: profile.username, role: profile.role, is_active: profile.is_active };
   document.getElementById('authScreen').classList.add('hidden');
   document.getElementById('appRoot').classList.remove('hidden');
-  document.getElementById('whoami').textContent = me.email;
+  document.getElementById('whoami').textContent = me.username;
   const badge = document.getElementById('roleBadge');
   badge.textContent = me.role;
   badge.className = 'role-badge' + (me.role==='admin' ? ' admin' : '');
@@ -283,7 +285,7 @@ async function startHeartbeat(){
 
 /* ---------- SHIPMENTS: DATA ---------- */
 async function loadShipments(){
-  const { data, error } = await sb.from('shipments').select('*, profiles(email)').order('date',{ascending:false});
+  const { data, error } = await sb.from('shipments').select('*, profiles(username)').order('date',{ascending:false});
   if(error){ showToast('Could not load shipments'); return; }
   shipments = data || [];
   render();
@@ -462,7 +464,7 @@ function render(){
     const gzPct = total? Math.round((s.gz/total)*100):0;
     const hkPct = total? Math.round((s.hk/total)*100):0;
     const appPct = total? Math.max(0,100-gzPct-hkPct):0;
-    const author = s.profiles ? s.profiles.email.split('@')[0] : '—';
+    const author = s.profiles ? s.profiles.username : '—';
     const tr=document.createElement('tr');
     tr.innerHTML =
       '<td>'+fmtDate(s.date)+'</td>'+
@@ -528,7 +530,7 @@ document.getElementById('exportBtn').addEventListener('click', ()=>{
   const esc=(v)=>{ const s=String(v??''); return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; };
   const lines=[header.join(',')];
   rows.forEach(s=>{
-    lines.push([s.date,esc(s.reference),s.gz,s.gz_weight,s.hk,s.hk_weight,s.app_gz,s.app_gz_weight,s.app_hk,s.app_hk_weight,s.app,s.app_weight,s.total_cartons,s.total_weight,esc(s.notes),esc(s.profiles?s.profiles.email:'')].join(','));
+    lines.push([s.date,esc(s.reference),s.gz,s.gz_weight,s.hk,s.hk_weight,s.app_gz,s.app_gz_weight,s.app_hk,s.app_hk_weight,s.app,s.app_weight,s.total_cartons,s.total_weight,esc(s.notes),esc(s.profiles?s.profiles.username:'')].join(','));
   });
   const blob = new Blob([lines.join('\n')],{type:'text/csv'});
   const url = URL.createObjectURL(blob);
@@ -561,14 +563,14 @@ async function loadAdminList(){
   const tbody = document.getElementById('adminTbody');
   tbody.innerHTML='';
   const now = Date.now();
-  result.users.sort((a,b)=> (a.email||'').localeCompare(b.email||''));
+  result.users.sort((a,b)=> (a.username||'').localeCompare(b.username||''));
   result.users.forEach(u=>{
     const online = u.last_seen && (now - new Date(u.last_seen).getTime()) < 2*60000;
     const banned = u.banned_until && new Date(u.banned_until).getTime() > now;
     const tr = document.createElement('tr');
     tr.innerHTML =
       '<td><span class="dot '+(online?'online':'offline')+'"></span>'+(online?'<span class="status-on">Online</span>':'<span style="color:var(--ink-soft);font-size:10.5px;">Offline</span>')+(!u.is_active||banned?' <span class="status-off">(disabled)</span>':'')+'</td>'+
-      '<td>'+escapeHtml(u.email)+(u.id===me.id?' <span style="font-size:10px;color:var(--ink-soft);">(you)</span>':'')+'</td>'+
+      '<td>'+escapeHtml(u.username)+(u.id===me.id?' <span style="font-size:10px;color:var(--ink-soft);">(you)</span>':'')+'</td>'+
       '<td>'+u.role+'</td>'+
       '<td class="subtd">'+(u.last_seen ? new Date(u.last_seen).toLocaleString() : 'never')+'</td>'+
       '<td class="actions-cell">'+
@@ -611,11 +613,11 @@ async function loadAdminList(){
 
 document.getElementById('createUserBtn').addEventListener('click', async ()=>{
   const errEl = document.getElementById('adminErr'); errEl.classList.remove('show');
-  const email = document.getElementById('newEmail').value.trim();
+  const username = document.getElementById('newEmail').value.trim();
   const password = document.getElementById('newPassword').value;
   const role = document.getElementById('newRole').value;
-  if(!email || password.length<6){ errEl.textContent='Enter an email and a password of at least 6 characters.'; errEl.classList.add('show'); return; }
-  const r = await callAdmin('create', { email, password, role });
+  if(!username || password.length<6){ errEl.textContent='Enter a username and a password of at least 6 characters.'; errEl.classList.add('show'); return; }
+  const r = await callAdmin('create', { username, password, role });
   if(r.error){ errEl.textContent = r.error; errEl.classList.add('show'); return; }
   document.getElementById('newEmail').value=''; document.getElementById('newPassword').value='';
   showToast('Account created');

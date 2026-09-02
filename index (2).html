@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dock Manifest</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+  :root{
+    --ink:#1B222C;--ink-soft:#4A5568;--paper:#EEF0F2;--panel:#FFFFFF;
+    --line:#D7DBDF;--line-strong:#B7BEC5;--accent:#C9971E;
+    --gz:#2F6F63;--gz-bg:#E4EFEC;--hk:#A6461F;--hk-bg:#F5E7E0;
+    --app:#4C5C9A;--app-bg:#E6E8F3;--danger:#B3382C;--ok:#2F6F63;
+    --font-sans: ui-sans-serif,-apple-system,"Segoe UI",system-ui,Roboto,sans-serif;
+    --font-mono: ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--font-sans);}
+  .wrap{max-width:1280px;margin:0 auto;padding:28px 24px 64px;}
+  .hidden{display:none !important;}
+  header.top{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid var(--ink);padding-bottom:16px;margin-bottom:24px;flex-wrap:wrap;gap:12px;}
+  header.top h1{font-size:24px;font-weight:700;margin:0 0 4px;}
+  header.top p{margin:0;color:var(--ink-soft);font-size:13px;}
+  .top-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .who{font-family:var(--font-mono);font-size:12px;color:var(--ink-soft);}
+  .role-badge{font-size:10px;padding:2px 7px;font-family:var(--font-sans);font-weight:600;border:1px solid var(--line-strong);}
+  .role-badge.admin{color:var(--accent);border-color:var(--accent);}
+
+  .btn{font-family:var(--font-sans);font-size:13px;font-weight:600;padding:9px 16px;border:1px solid var(--ink);background:var(--ink);color:#fff;cursor:pointer;}
+  .btn:hover{background:#000;}
+  .btn.secondary{background:transparent;color:var(--ink);border:1px solid var(--line-strong);}
+  .btn.secondary:hover{border-color:var(--ink);}
+  .btn.danger{background:var(--danger);border-color:var(--danger);}
+  .btn.small{padding:6px 11px;font-size:12px;}
+  .btn.add-row{background:transparent;color:var(--ink);border:1px dashed var(--line-strong);width:100%;padding:10px;margin-bottom:14px;}
+
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--line-strong);border:1px solid var(--line-strong);margin-bottom:24px;}
+  .stat{background:var(--panel);padding:14px 16px;}
+  .stat .label{font-size:11px;color:var(--ink-soft);margin-bottom:5px;}
+  .stat .value{font-family:var(--font-mono);font-size:18px;font-weight:600;}
+  .stat .value.gz{color:var(--gz);}.stat .value.hk{color:var(--hk);}.stat .value.app{color:var(--app);}
+
+  .panel{background:var(--panel);border:1px solid var(--line-strong);margin-bottom:22px;}
+  .panel-head{display:flex;justify-content:space-between;align-items:center;padding:13px 16px;border-bottom:1px solid var(--line);cursor:pointer;}
+  .panel-head h2{font-size:14px;font-weight:600;margin:0;}
+  .panel-body{padding:16px;}
+
+  .rowcard{border:1px solid var(--line);padding:12px;margin-bottom:10px;background:var(--paper);}
+  .rownum{font-family:var(--font-mono);font-size:11px;color:var(--ink-soft);margin-bottom:8px;display:flex;justify-content:space-between;}
+  .remove-row{background:none;border:none;color:var(--danger);cursor:pointer;font-size:12px;}
+  .form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;}
+  .field label{display:block;font-size:11px;color:var(--ink-soft);margin-bottom:4px;}
+  .field input,.field select{width:100%;padding:8px 9px;border:1px solid var(--line-strong);background:#fff;font-family:var(--font-mono);font-size:13px;color:var(--ink);}
+  .field.wide{grid-column:span 2;}
+  .route-block{border-left:3px solid var(--line-strong);padding-left:10px;margin:10px 0;}
+  .route-block.gz{border-left-color:var(--gz);}.route-block.hk{border-left-color:var(--hk);}.route-block.app{border-left-color:var(--app);}
+  .route-label{font-size:11px;font-weight:600;margin-bottom:6px;}
+  .route-block.gz .route-label{color:var(--gz);}.route-block.hk .route-label{color:var(--hk);}.route-block.app .route-label{color:var(--app);}
+  .route-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .subroute-block{border-left:2px solid var(--line-strong);padding-left:9px;margin:7px 0;}
+  .subroute-block.gz{border-left-color:var(--gz);}.subroute-block.hk{border-left-color:var(--hk);}
+  .subroute-label{font-size:10px;font-weight:600;margin-bottom:5px;}
+  .subroute-block.gz .subroute-label{color:var(--gz);}.subroute-block.hk .subroute-label{color:var(--hk);}
+  .row-total{font-family:var(--font-mono);font-size:11px;color:var(--ink-soft);margin-top:8px;}
+  .err{color:var(--danger);font-size:12px;margin:6px 0;display:none;}
+  .err.show{display:block;}
+
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;margin-bottom:12px;}
+  .filters{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;}
+  .filters .field{min-width:120px;}
+
+  table{width:100%;border-collapse:collapse;font-size:12px;}
+  thead th{text-align:left;font-size:10.5px;color:var(--ink-soft);font-weight:600;padding:7px 6px;border-bottom:2px solid var(--ink);cursor:pointer;white-space:nowrap;}
+  tbody td{padding:8px 6px;border-bottom:1px solid var(--line);font-family:var(--font-mono);}
+  tbody td.ref-cell{font-family:var(--font-sans);}
+  .num{text-align:right;}
+  .subtd{font-size:9px;color:var(--ink-soft);white-space:nowrap;}
+  .actions-cell{text-align:right;white-space:nowrap;}
+  .icon-btn{background:none;border:none;cursor:pointer;padding:3px 5px;color:var(--ink-soft);font-size:11px;}
+  .icon-btn:hover{color:var(--ink);}
+  .icon-btn.del:hover{color:var(--danger);}
+  .empty{text-align:center;padding:40px 20px;color:var(--ink-soft);}
+
+  #toast{position:fixed;bottom:20px;right:20px;background:var(--ink);color:#fff;padding:11px 18px;font-size:13px;transform:translateY(20px);opacity:0;transition:all .2s;pointer-events:none;z-index:60;}
+  #toast.show{transform:translateY(0);opacity:1;}
+
+  .authwrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;}
+  .authcard{background:var(--panel);border:1px solid var(--line-strong);max-width:360px;width:100%;padding:26px;}
+  .authcard h1{font-size:20px;margin:0 0 6px;}
+  .authcard p{font-size:13px;color:var(--ink-soft);margin:0 0 16px;}
+  .authcard .field{margin-bottom:12px;}
+
+  .adminlist{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px;}
+  .adminlist th{text-align:left;font-size:10.5px;color:var(--ink-soft);padding:6px;border-bottom:2px solid var(--ink);}
+  .adminlist td{padding:7px 6px;border-bottom:1px solid var(--line);font-family:var(--font-mono);vertical-align:middle;}
+  .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;}
+  .dot.online{background:var(--ok);}
+  .dot.offline{background:var(--line-strong);}
+  .status-off{color:var(--danger);font-family:var(--font-sans);font-size:10.5px;}
+  .status-on{color:var(--ok);font-family:var(--font-sans);font-size:10.5px;}
+</style>
+</head>
+<body>
+
+<div id="authScreen" class="authwrap">
+  <div class="authcard">
+    <h1>Dock manifest</h1>
+    <p id="authSubtitle">Sign in with the account your admin created for you.</p>
+    <div class="field"><label>Email</label><input type="email" id="authEmail" autocomplete="username"></div>
+    <div class="field"><label>Password</label><input type="password" id="authPassword" autocomplete="current-password"></div>
+    <div class="err" id="authErr"></div>
+    <button class="btn" id="signInBtn" style="width:100%;">Sign in</button>
+  </div>
+</div>
+
+<div id="appRoot" class="hidden">
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Dock manifest</h1>
+      <p>Shared shipment manifest — GZ, HK and APP (with GZ/HK split)</p>
+    </div>
+    <div class="top-right">
+      <span class="who" id="whoami"></span>
+      <span class="role-badge" id="roleBadge"></span>
+      <button class="btn secondary small hidden" id="adminBtn">Admin</button>
+      <button class="btn secondary small" id="signOutBtn">Sign out</button>
+    </div>
+  </header>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="panel" id="adminPanel" style="display:none;">
+    <div class="panel-head"><h2>Admin — accounts</h2><button class="btn secondary small" id="closeAdmin">Close</button></div>
+    <div class="panel-body">
+      <div class="form-grid" style="align-items:end;margin-bottom:14px;">
+        <div class="field"><label>New staff email</label><input type="email" id="newEmail"></div>
+        <div class="field"><label>Temporary password</label><input type="text" id="newPassword" placeholder="min 6 characters"></div>
+        <div class="field"><label>Role</label><select id="newRole"><option value="staff">Staff</option><option value="admin">Admin</option></select></div>
+        <div class="field"><button class="btn" id="createUserBtn" style="width:100%;">Create account</button></div>
+      </div>
+      <div class="err" id="adminErr"></div>
+      <table class="adminlist">
+        <thead><tr><th>Status</th><th>Email</th><th>Role</th><th>Last active</th><th></th></tr></thead>
+        <tbody id="adminTbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head" id="formToggle"><h2>Log shipments</h2><span id="formChev">&#9662;</span></div>
+    <div class="panel-body" id="formBody">
+      <form id="shipForm">
+        <div id="rowsContainer"></div>
+        <button type="button" class="btn add-row" id="addRowBtn">+ Add another shipment row</button>
+        <div class="err" id="formErr"></div>
+        <div style="display:flex;gap:10px;">
+          <button type="submit" class="btn" id="submitBtn">Save shipments</button>
+          <button type="button" class="btn secondary hidden" id="cancelEdit">Cancel edit</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-body">
+      <div class="toolbar">
+        <div class="filters">
+          <div class="field"><label>From</label><input type="date" id="fltFrom"></div>
+          <div class="field"><label>To</label><input type="date" id="fltTo"></div>
+          <div class="field"><label>Route</label>
+            <select id="fltType"><option value="all">All</option><option value="gz">GZ only</option><option value="hk">HK only</option><option value="app">APP only</option><option value="mixed">Mixed</option></select>
+          </div>
+          <div class="field" style="min-width:170px;"><label>Search</label><input type="text" id="fltSearch" placeholder="Reference / notes"></div>
+        </div>
+        <div style="display:flex;gap:10px;">
+          <button class="btn secondary small" id="clearFilters">Clear filters</button>
+          <button class="btn secondary small" id="exportBtn">Export CSV</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead><tr>
+            <th data-sort="date">Date</th><th data-sort="reference">Reference</th>
+            <th data-sort="gz" class="num">GZ ctns</th><th data-sort="gz_weight" class="num">GZ kg</th>
+            <th data-sort="hk" class="num">HK ctns</th><th data-sort="hk_weight" class="num">HK kg</th>
+            <th data-sort="app" class="num">APP ctns</th><th data-sort="app_weight" class="num">APP kg</th>
+            <th data-sort="total_cartons" class="num">Total ctns</th><th data-sort="total_weight" class="num">Total kg</th>
+            <th>By</th><th></th>
+          </tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+        <div class="empty" id="emptyState" style="display:none;"><strong>No shipments logged yet</strong></div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const SUPABASE_URL = 'https://vsmihhipjmrapwcupmcx.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZzbWloaGlwam1yYXB3Y3VwbWN4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc3MzM3MzUsImV4cCI6MjEwMzMwOTczNX0.bfoa8YPerJMTRtlIJHDZuWofEHdW9f0v0GBIuYK2I98';
+const ADMIN_FN_URL = SUPABASE_URL + '/functions/v1/admin-users';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let me = null;       // {id, email, role, is_active}
+let shipments = [];
+let sortKey = 'date', sortDir = 'desc';
+let editingId = null;
+let formRows = [];
+let rowSeq = 0;
+let heartbeatTimer = null;
+
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(()=>t.classList.remove('show'), 2200);
+}
+function fmtNum(n,d){ return Number(n||0).toLocaleString(undefined,{minimumFractionDigits:d||0,maximumFractionDigits:d||0}); }
+function fmtDate(iso){ const [y,m,d]=iso.split('-'); return d+'/'+m+'/'+y; }
+function todayStr(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
+function escapeAttr(s){ return escapeHtml(s).replace(/"/g,'&quot;'); }
+
+/* ---------- AUTH ---------- */
+document.getElementById('signInBtn').addEventListener('click', signIn);
+['authEmail','authPassword'].forEach(id=>document.getElementById(id).addEventListener('keydown',e=>{if(e.key==='Enter')signIn();}));
+
+async function signIn(){
+  const errEl = document.getElementById('authErr');
+  errEl.classList.remove('show');
+  const email = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value;
+  if(!email || !password){ errEl.textContent='Enter your email and password.'; errEl.classList.add('show'); return; }
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  if(error){ errEl.textContent = 'Sign-in failed: '+error.message; errEl.classList.add('show'); return; }
+  await afterSignIn(data.session);
+}
+
+async function afterSignIn(session){
+  const { data: profile, error } = await sb.from('profiles').select('*').eq('id', session.user.id).single();
+  if(error || !profile){ document.getElementById('authErr').textContent='Could not load your account.'; document.getElementById('authErr').classList.add('show'); await sb.auth.signOut(); return; }
+  if(!profile.is_active){
+    document.getElementById('authErr').textContent = 'This account has been disabled by your admin.';
+    document.getElementById('authErr').classList.add('show');
+    await sb.auth.signOut();
+    return;
+  }
+  me = { id: profile.id, email: profile.email, role: profile.role, is_active: profile.is_active };
+  document.getElementById('authScreen').classList.add('hidden');
+  document.getElementById('appRoot').classList.remove('hidden');
+  document.getElementById('whoami').textContent = me.email;
+  const badge = document.getElementById('roleBadge');
+  badge.textContent = me.role;
+  badge.className = 'role-badge' + (me.role==='admin' ? ' admin' : '');
+  document.getElementById('adminBtn').classList.toggle('hidden', me.role !== 'admin');
+  startHeartbeat();
+  resetForm();
+  await loadShipments();
+  subscribeRealtime();
+}
+
+document.getElementById('signOutBtn').addEventListener('click', async ()=>{
+  clearInterval(heartbeatTimer);
+  await sb.auth.signOut();
+  location.reload();
+});
+
+async function startHeartbeat(){
+  const beat = async ()=>{ if(me) await sb.from('profiles').update({last_seen:new Date().toISOString()}).eq('id', me.id); };
+  await beat();
+  heartbeatTimer = setInterval(beat, 60000);
+}
+
+/* Restore session on reload */
+(async ()=>{
+  const { data:{ session } } = await sb.auth.getSession();
+  if(session) await afterSignIn(session);
+})();
+
+/* ---------- SHIPMENTS: DATA ---------- */
+async function loadShipments(){
+  const { data, error } = await sb.from('shipments').select('*, profiles(email)').order('date',{ascending:false});
+  if(error){ showToast('Could not load shipments'); return; }
+  shipments = data || [];
+  render();
+}
+
+function subscribeRealtime(){
+  sb.channel('shipments-changes')
+    .on('postgres_changes', { event:'*', schema:'public', table:'shipments' }, ()=>loadShipments())
+    .subscribe();
+}
+
+/* ---------- FORM ---------- */
+function newRowData(){
+  rowSeq++;
+  return {rowId:'r'+rowSeq, date:todayStr(), reference:'', gz:'', gzWeight:'', hk:'', hkWeight:'', appGz:'', appGzWeight:'', appHk:'', appHkWeight:'', notes:''};
+}
+function addFormRow(data){ formRows.push(data||newRowData()); renderFormRows(); }
+function removeFormRow(rowId){ formRows=formRows.filter(r=>r.rowId!==rowId); if(formRows.length===0) addFormRow(); else renderFormRows(); }
+
+document.getElementById('formToggle').addEventListener('click', ()=>{
+  const b=document.getElementById('formBody'); b.classList.toggle('hidden');
+  document.getElementById('formChev').innerHTML = b.classList.contains('hidden') ? '&#9656;' : '&#9662;';
+});
+document.getElementById('addRowBtn').addEventListener('click', ()=>addFormRow());
+document.getElementById('cancelEdit').addEventListener('click', resetForm);
+
+function resetForm(){
+  editingId = null;
+  formRows = [newRowData()];
+  renderFormRows();
+  document.getElementById('submitBtn').textContent = 'Save shipments';
+  document.getElementById('cancelEdit').classList.add('hidden');
+  document.getElementById('addRowBtn').classList.remove('hidden');
+  document.getElementById('formErr').classList.remove('show');
+}
+
+function renderFormRows(){
+  const c = document.getElementById('rowsContainer');
+  c.innerHTML = '';
+  formRows.forEach((r,idx)=>{
+    const div = document.createElement('div');
+    div.className='rowcard'; div.dataset.rowid=r.rowId;
+    div.innerHTML =
+      '<div class="rownum"><span>Shipment '+(idx+1)+'</span>'+(formRows.length>1 && !editingId ? '<button type="button" class="remove-row" data-rowid="'+r.rowId+'">Remove row</button>':'')+'</div>'+
+      '<div class="form-grid">'+
+        '<div class="field"><label>Date received</label><input type="date" class="f-date" value="'+r.date+'"></div>'+
+        '<div class="field wide"><label>Reference / container no.</label><input type="text" class="f-ref" value="'+escapeAttr(r.reference)+'"></div>'+
+      '</div>'+
+      '<div class="route-block gz"><div class="route-label">GZ</div><div class="route-fields">'+
+        '<div class="field"><label>Cartons</label><input type="number" class="f-gz" min="0" step="1" value="'+r.gz+'"></div>'+
+        '<div class="field"><label>Weight (kg)</label><input type="number" class="f-gzw" min="0" step="0.1" value="'+r.gzWeight+'"></div>'+
+      '</div></div>'+
+      '<div class="route-block hk"><div class="route-label">HK</div><div class="route-fields">'+
+        '<div class="field"><label>Cartons</label><input type="number" class="f-hk" min="0" step="1" value="'+r.hk+'"></div>'+
+        '<div class="field"><label>Weight (kg)</label><input type="number" class="f-hkw" min="0" step="0.1" value="'+r.hkWeight+'"></div>'+
+      '</div></div>'+
+      '<div class="route-block app"><div class="route-label">APP</div>'+
+        '<div class="subroute-block gz"><div class="subroute-label">GZ</div><div class="route-fields">'+
+          '<div class="field"><label>Cartons</label><input type="number" class="f-appgz" min="0" step="1" value="'+r.appGz+'"></div>'+
+          '<div class="field"><label>Weight (kg)</label><input type="number" class="f-appgzw" min="0" step="0.1" value="'+r.appGzWeight+'"></div>'+
+        '</div></div>'+
+        '<div class="subroute-block hk"><div class="subroute-label">HK</div><div class="route-fields">'+
+          '<div class="field"><label>Cartons</label><input type="number" class="f-apphk" min="0" step="1" value="'+r.appHk+'"></div>'+
+          '<div class="field"><label>Weight (kg)</label><input type="number" class="f-apphkw" min="0" step="0.1" value="'+r.appHkWeight+'"></div>'+
+        '</div></div>'+
+      '</div>'+
+      '<div class="form-grid"><div class="field wide"><label>Notes</label><input type="text" class="f-notes" value="'+escapeAttr(r.notes)+'"></div></div>'+
+      '<div class="row-total">Shipping total: <b class="rt-ctn">0</b> cartons, <b class="rt-kg">0.0</b> kg</div>';
+    c.appendChild(div);
+  });
+  c.querySelectorAll('.remove-row').forEach(b=>b.addEventListener('click',()=>removeFormRow(b.dataset.rowid)));
+  c.querySelectorAll('input').forEach(i=>i.addEventListener('input', updateRowTotals));
+  updateRowTotals();
+}
+
+function updateRowTotals(){
+  document.querySelectorAll('#rowsContainer .rowcard').forEach(card=>{
+    const g=(s)=>parseFloat(card.querySelector(s).value||'0')||0;
+    const gz=g('.f-gz'), hk=g('.f-hk'), gzw=g('.f-gzw'), hkw=g('.f-hkw');
+    const agz=g('.f-appgz'), ahk=g('.f-apphk'), agzw=g('.f-appgzw'), ahkw=g('.f-apphkw');
+    card.querySelector('.rt-ctn').textContent = fmtNum(gz+hk+agz+ahk);
+    card.querySelector('.rt-kg').textContent = fmtNum(gzw+hkw+agzw+ahkw,1);
+  });
+}
+
+document.getElementById('shipForm').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const errEl = document.getElementById('formErr'); errEl.classList.remove('show');
+  const cards = document.querySelectorAll('#rowsContainer .rowcard');
+  const parsed = [];
+  for(const card of cards){
+    const v=(s)=>card.querySelector(s).value;
+    const nInt=(s)=>parseInt(v(s)||'0',10)||0;
+    const nF=(s)=>parseFloat(v(s)||'0')||0;
+    const date=v('.f-date'), reference=v('.f-ref').trim(), notes=v('.f-notes').trim();
+    const gz=nInt('.f-gz'), gzWeight=nF('.f-gzw'), hk=nInt('.f-hk'), hkWeight=nF('.f-hkw');
+    const appGz=nInt('.f-appgz'), appGzWeight=nF('.f-appgzw'), appHk=nInt('.f-apphk'), appHkWeight=nF('.f-apphkw');
+    const app = appGz+appHk, appWeight = appGzWeight+appHkWeight;
+    if(!date){ errEl.textContent='Every row needs a date.'; errEl.classList.add('show'); return; }
+    if(gz+hk+app<=0){ errEl.textContent='Each row needs at least one carton in GZ, HK or APP.'; errEl.classList.add('show'); return; }
+    if(gz>0 && gzWeight<=0){ errEl.textContent='Enter a GZ weight for rows with GZ cartons.'; errEl.classList.add('show'); return; }
+    if(hk>0 && hkWeight<=0){ errEl.textContent='Enter an HK weight for rows with HK cartons.'; errEl.classList.add('show'); return; }
+    if(appGz>0 && appGzWeight<=0){ errEl.textContent='Enter an APP GZ weight for rows with APP GZ cartons.'; errEl.classList.add('show'); return; }
+    if(appHk>0 && appHkWeight<=0){ errEl.textContent='Enter an APP HK weight for rows with APP HK cartons.'; errEl.classList.add('show'); return; }
+    parsed.push({
+      date, reference, notes, gz, gz_weight:gzWeight, hk, hk_weight:hkWeight,
+      app_gz:appGz, app_gz_weight:appGzWeight, app_hk:appHk, app_hk_weight:appHkWeight,
+      app, app_weight:appWeight, total_cartons: gz+hk+app, total_weight: gzWeight+hkWeight+appWeight,
+      created_by: me.id
+    });
+  }
+  if(editingId){
+    const { error } = await sb.from('shipments').update(parsed[0]).eq('id', editingId);
+    if(error){ errEl.textContent='Save failed: '+error.message; errEl.classList.add('show'); return; }
+    showToast('Shipment updated');
+  }else{
+    const { error } = await sb.from('shipments').insert(parsed);
+    if(error){ errEl.textContent='Save failed: '+error.message; errEl.classList.add('show'); return; }
+    showToast(parsed.length===1 ? 'Shipment logged' : parsed.length+' shipments logged');
+  }
+  resetForm();
+  await loadShipments();
+});
+
+/* ---------- TABLE / FILTER / SORT ---------- */
+document.querySelectorAll('thead th[data-sort]').forEach(th=>{
+  th.addEventListener('click', ()=>{
+    const key = th.dataset.sort;
+    if(sortKey===key) sortDir = sortDir==='asc'?'desc':'asc'; else { sortKey=key; sortDir='asc'; }
+    render();
+  });
+});
+['fltFrom','fltTo','fltType','fltSearch'].forEach(id=>document.getElementById(id).addEventListener('input', render));
+document.getElementById('clearFilters').addEventListener('click', ()=>{
+  document.getElementById('fltFrom').value=''; document.getElementById('fltTo').value='';
+  document.getElementById('fltType').value='all'; document.getElementById('fltSearch').value='';
+  render();
+});
+
+function getFiltered(){
+  const from=document.getElementById('fltFrom').value, to=document.getElementById('fltTo').value;
+  const type=document.getElementById('fltType').value;
+  const search=document.getElementById('fltSearch').value.trim().toLowerCase();
+  return shipments.filter(s=>{
+    if(from && s.date<from) return false;
+    if(to && s.date>to) return false;
+    const rc=(s.gz>0?1:0)+(s.hk>0?1:0)+(s.app>0?1:0);
+    if(type==='gz' && !(s.gz>0 && s.hk===0 && s.app===0)) return false;
+    if(type==='hk' && !(s.hk>0 && s.gz===0 && s.app===0)) return false;
+    if(type==='app' && !(s.app>0 && s.gz===0 && s.hk===0)) return false;
+    if(type==='mixed' && rc<2) return false;
+    if(search){
+      const hay=((s.reference||'')+' '+(s.notes||'')).toLowerCase();
+      if(!hay.includes(search)) return false;
+    }
+    return true;
+  });
+}
+function sortRows(rows){
+  const dir = sortDir==='asc'?1:-1;
+  return rows.slice().sort((a,b)=>{
+    let av,bv;
+    if(sortKey==='reference'){ av=(a.reference||'').toLowerCase(); bv=(b.reference||'').toLowerCase(); }
+    else { av=a[sortKey]; bv=b[sortKey]; }
+    if(av<bv) return -1*dir; if(av>bv) return 1*dir; return 0;
+  });
+}
+
+function render(){
+  const filtered = sortRows(getFiltered());
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML='';
+  document.getElementById('emptyState').style.display = filtered.length===0 ? 'block':'none';
+  filtered.forEach(s=>{
+    const total=s.total_cartons, weight=s.total_weight;
+    const gzPct = total? Math.round((s.gz/total)*100):0;
+    const hkPct = total? Math.round((s.hk/total)*100):0;
+    const appPct = total? Math.max(0,100-gzPct-hkPct):0;
+    const author = s.profiles ? s.profiles.email.split('@')[0] : '—';
+    const tr=document.createElement('tr');
+    tr.innerHTML =
+      '<td>'+fmtDate(s.date)+'</td>'+
+      '<td class="ref-cell">'+(s.reference?escapeHtml(s.reference):'—')+(s.notes?'<div class="subtd">'+escapeHtml(s.notes)+'</div>':'')+'</td>'+
+      '<td class="num">'+fmtNum(s.gz)+'</td><td class="num">'+fmtNum(s.gz_weight,1)+'</td>'+
+      '<td class="num">'+fmtNum(s.hk)+'</td><td class="num">'+fmtNum(s.hk_weight,1)+'</td>'+
+      '<td class="num">'+fmtNum(s.app)+'<div class="subtd">GZ '+fmtNum(s.app_gz)+'/HK '+fmtNum(s.app_hk)+'</div></td>'+
+      '<td class="num">'+fmtNum(s.app_weight,1)+'<div class="subtd">GZ '+fmtNum(s.app_gz_weight,1)+'/HK '+fmtNum(s.app_hk_weight,1)+'</div></td>'+
+      '<td class="num">'+fmtNum(total)+'</td><td class="num">'+fmtNum(weight,1)+'</td>'+
+      '<td class="subtd">'+escapeHtml(author)+'</td>'+
+      '<td class="actions-cell"><button class="icon-btn edit" data-id="'+s.id+'">Edit</button><button class="icon-btn del" data-id="'+s.id+'">Delete</button></td>';
+    tbody.appendChild(tr);
+  });
+  tbody.querySelectorAll('.edit').forEach(b=>b.addEventListener('click',()=>startEdit(b.dataset.id)));
+  tbody.querySelectorAll('.del').forEach(b=>b.addEventListener('click',()=>deleteShipment(b.dataset.id)));
+  renderStats();
+}
+
+function startEdit(id){
+  const s = shipments.find(x=>x.id===id); if(!s) return;
+  editingId = id;
+  formRows = [{rowId:'edit', date:s.date, reference:s.reference||'', gz:s.gz, gzWeight:s.gz_weight, hk:s.hk, hkWeight:s.hk_weight, appGz:s.app_gz, appGzWeight:s.app_gz_weight, appHk:s.app_hk, appHkWeight:s.app_hk_weight, notes:s.notes||''}];
+  renderFormRows();
+  document.getElementById('submitBtn').textContent='Update shipment';
+  document.getElementById('cancelEdit').classList.remove('hidden');
+  document.getElementById('addRowBtn').classList.add('hidden');
+  document.getElementById('formBody').classList.remove('hidden');
+  document.getElementById('shipForm').scrollIntoView({behavior:'smooth'});
+}
+async function deleteShipment(id){
+  const s = shipments.find(x=>x.id===id); if(!s) return;
+  if(!confirm('Delete shipment from '+fmtDate(s.date)+'?')) return;
+  const { error } = await sb.from('shipments').delete().eq('id', id);
+  if(error){ showToast('Delete failed'); return; }
+  if(editingId===id) resetForm();
+  showToast('Shipment deleted');
+  await loadShipments();
+}
+
+function renderStats(){
+  const all = shipments;
+  const sum=(f)=>all.reduce((a,s)=>a+(s[f]||0),0);
+  const totalCartons = sum('total_cartons'), totalWeight = sum('total_weight');
+  const totalGz=sum('gz'), totalHk=sum('hk'), totalApp=sum('app');
+  const totalGzW=sum('gz_weight'), totalHkW=sum('hk_weight'), totalAppW=sum('app_weight');
+  const gzPct = totalCartons? Math.round(totalGz/totalCartons*100):0;
+  const hkPct = totalCartons? Math.round(totalHk/totalCartons*100):0;
+  const appPct = totalCartons? Math.max(0,100-gzPct-hkPct):0;
+  document.getElementById('stats').innerHTML =
+    '<div class="stat"><div class="label">Shipments</div><div class="value">'+fmtNum(all.length)+'</div></div>'+
+    '<div class="stat"><div class="label">Total weight</div><div class="value">'+fmtNum(totalWeight,1)+' kg</div></div>'+
+    '<div class="stat"><div class="label">Total cartons</div><div class="value">'+fmtNum(totalCartons)+'</div></div>'+
+    '<div class="stat"><div class="label">GZ ctns/kg</div><div class="value gz">'+fmtNum(totalGz)+' / '+fmtNum(totalGzW,1)+'</div></div>'+
+    '<div class="stat"><div class="label">HK ctns/kg</div><div class="value hk">'+fmtNum(totalHk)+' / '+fmtNum(totalHkW,1)+'</div></div>'+
+    '<div class="stat"><div class="label">APP ctns/kg</div><div class="value app">'+fmtNum(totalApp)+' / '+fmtNum(totalAppW,1)+'</div></div>';
+}
+
+/* ---------- CSV ---------- */
+document.getElementById('exportBtn').addEventListener('click', ()=>{
+  const rows = sortRows(getFiltered());
+  if(rows.length===0){ showToast('No shipments to export'); return; }
+  const header=['Date','Reference','GZ ctns','GZ kg','HK ctns','HK kg','APP GZ ctns','APP GZ kg','APP HK ctns','APP HK kg','APP total ctns','APP total kg','Total ctns','Total kg','Notes','Logged by'];
+  const esc=(v)=>{ const s=String(v??''); return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; };
+  const lines=[header.join(',')];
+  rows.forEach(s=>{
+    lines.push([s.date,esc(s.reference),s.gz,s.gz_weight,s.hk,s.hk_weight,s.app_gz,s.app_gz_weight,s.app_hk,s.app_hk_weight,s.app,s.app_weight,s.total_cartons,s.total_weight,esc(s.notes),esc(s.profiles?s.profiles.email:'')].join(','));
+  });
+  const blob = new Blob([lines.join('\n')],{type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download='dock-manifest-'+todayStr()+'.csv'; a.click();
+  URL.revokeObjectURL(url);
+});
+
+/* ---------- ADMIN PANEL ---------- */
+document.getElementById('adminBtn').addEventListener('click', async ()=>{
+  document.getElementById('adminPanel').style.display='block';
+  document.getElementById('adminPanel').scrollIntoView({behavior:'smooth'});
+  await loadAdminList();
+});
+document.getElementById('closeAdmin').addEventListener('click', ()=>{ document.getElementById('adminPanel').style.display='none'; });
+
+async function callAdmin(action, payload){
+  const { data:{ session } } = await sb.auth.getSession();
+  const res = await fetch(ADMIN_FN_URL, {
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token},
+    body: JSON.stringify({ action, ...payload })
+  });
+  return res.json();
+}
+
+async function loadAdminList(){
+  const errEl = document.getElementById('adminErr'); errEl.classList.remove('show');
+  const result = await callAdmin('list', {});
+  if(result.error){ errEl.textContent = result.error; errEl.classList.add('show'); return; }
+  const tbody = document.getElementById('adminTbody');
+  tbody.innerHTML='';
+  const now = Date.now();
+  result.users.sort((a,b)=> (a.email||'').localeCompare(b.email||''));
+  result.users.forEach(u=>{
+    const online = u.last_seen && (now - new Date(u.last_seen).getTime()) < 2*60000;
+    const banned = u.banned_until && new Date(u.banned_until).getTime() > now;
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td><span class="dot '+(online?'online':'offline')+'"></span>'+(online?'<span class="status-on">Online</span>':'<span style="color:var(--ink-soft);font-size:10.5px;">Offline</span>')+(!u.is_active||banned?' <span class="status-off">(disabled)</span>':'')+'</td>'+
+      '<td>'+escapeHtml(u.email)+(u.id===me.id?' <span style="font-size:10px;color:var(--ink-soft);">(you)</span>':'')+'</td>'+
+      '<td>'+u.role+'</td>'+
+      '<td class="subtd">'+(u.last_seen ? new Date(u.last_seen).toLocaleString() : 'never')+'</td>'+
+      '<td class="actions-cell">'+
+        '<button class="icon-btn toggle-active" data-id="'+u.id+'" data-active="'+u.is_active+'">'+(u.is_active?'Disable':'Enable')+'</button>'+
+        '<button class="icon-btn toggle-role" data-id="'+u.id+'" data-role="'+u.role+'">'+(u.role==='admin'?'Make staff':'Make admin')+'</button>'+
+        '<button class="icon-btn reset-pw" data-id="'+u.id+'">Reset pw</button>'+
+        '<button class="icon-btn del-user" data-id="'+u.id+'">Delete</button>'+
+      '</td>';
+    tbody.appendChild(tr);
+  });
+  tbody.querySelectorAll('.toggle-active').forEach(b=>b.addEventListener('click', async ()=>{
+    const isActive = b.dataset.active === 'true';
+    const r = await callAdmin('setActive', { userId:b.dataset.id, isActive: !isActive });
+    if(r.error) return showToast(r.error);
+    showToast(isActive?'Account disabled':'Account enabled');
+    loadAdminList();
+  }));
+  tbody.querySelectorAll('.toggle-role').forEach(b=>b.addEventListener('click', async ()=>{
+    const newRole = b.dataset.role==='admin' ? 'staff':'admin';
+    const r = await callAdmin('setRole', { userId:b.dataset.id, role:newRole });
+    if(r.error) return showToast(r.error);
+    showToast('Role updated');
+    loadAdminList();
+  }));
+  tbody.querySelectorAll('.reset-pw').forEach(b=>b.addEventListener('click', async ()=>{
+    const newPassword = prompt('New temporary password (min 6 characters):');
+    if(!newPassword) return;
+    const r = await callAdmin('resetPassword', { userId:b.dataset.id, newPassword });
+    if(r.error) return showToast(r.error);
+    showToast('Password reset');
+  }));
+  tbody.querySelectorAll('.del-user').forEach(b=>b.addEventListener('click', async ()=>{
+    if(!confirm('Permanently delete this account? This cannot be undone.')) return;
+    const r = await callAdmin('delete', { userId:b.dataset.id });
+    if(r.error) return showToast(r.error);
+    showToast('Account deleted');
+    loadAdminList();
+  }));
+}
+
+document.getElementById('createUserBtn').addEventListener('click', async ()=>{
+  const errEl = document.getElementById('adminErr'); errEl.classList.remove('show');
+  const email = document.getElementById('newEmail').value.trim();
+  const password = document.getElementById('newPassword').value;
+  const role = document.getElementById('newRole').value;
+  if(!email || password.length<6){ errEl.textContent='Enter an email and a password of at least 6 characters.'; errEl.classList.add('show'); return; }
+  const r = await callAdmin('create', { email, password, role });
+  if(r.error){ errEl.textContent = r.error; errEl.classList.add('show'); return; }
+  document.getElementById('newEmail').value=''; document.getElementById('newPassword').value='';
+  showToast('Account created');
+  loadAdminList();
+});
+</script>
+</body>
+</html>

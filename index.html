@@ -79,6 +79,25 @@
   .icon-btn{background:none;border:none;cursor:pointer;padding:3px 5px;color:var(--ink-soft);font-size:11px;}
   .icon-btn:hover{color:var(--ink);}
   .icon-btn.del:hover{color:var(--danger);}
+
+  .modal-overlay{position:fixed;inset:0;background:rgba(27,34,44,0.55);display:flex;align-items:center;justify-content:center;padding:24px;z-index:70;}
+  .modal-card{background:var(--panel);border:1px solid var(--line-strong);max-width:520px;width:100%;max-height:80vh;display:flex;flex-direction:column;}
+  .modal-head{display:flex;justify-content:space-between;align-items:flex-start;padding:16px 18px;border-bottom:1px solid var(--line);gap:12px;}
+  .modal-head h3{font-size:15px;font-weight:600;margin:0 0 3px;}
+  .modal-head p{margin:0;font-size:12px;color:var(--ink-soft);}
+  .modal-close{background:none;border:none;cursor:pointer;color:var(--ink-soft);font-size:18px;line-height:1;padding:2px;}
+  .modal-close:hover{color:var(--ink);}
+  .modal-body{padding:16px 18px;overflow-y:auto;}
+  .upload-row{border:1px dashed var(--line-strong);padding:12px;display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;}
+  .upload-row input[type=file]{flex:1;min-width:180px;font-size:12px;font-family:var(--font-sans);}
+  #attachUploadStatus{font-size:11px;color:var(--ink-soft);font-family:var(--font-mono);}
+  .attach-list{list-style:none;margin:0;padding:0;}
+  .attach-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);}
+  .attach-row:last-child{border-bottom:none;}
+  .attach-name{font-size:13px;word-break:break-all;}
+  .attach-meta{font-size:11px;color:var(--ink-soft);font-family:var(--font-mono);margin-top:2px;}
+  .attach-actions{display:flex;gap:4px;flex-shrink:0;}
+  .attach-empty{text-align:center;color:var(--ink-soft);font-size:13px;padding:20px 0;}
   .empty{text-align:center;padding:40px 20px;color:var(--ink-soft);}
 
   #toast{position:fixed;bottom:20px;right:20px;background:var(--ink);color:#fff;padding:11px 18px;font-size:13px;transform:translateY(20px);opacity:0;transition:all .2s;pointer-events:none;z-index:60;}
@@ -199,6 +218,26 @@
 
 <div id="toast"></div>
 
+<div class="modal-overlay hidden" id="attachOverlay">
+  <div class="modal-card">
+    <div class="modal-head">
+      <div>
+        <h3 id="attachTitle">Files</h3>
+        <p id="attachSubtitle"></p>
+      </div>
+      <button class="modal-close" id="attachCloseBtn" type="button">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="upload-row">
+        <input type="file" id="attachFileInput">
+        <span id="attachUploadStatus"></span>
+      </div>
+      <ul class="attach-list" id="attachList"></ul>
+      <div class="attach-empty hidden" id="attachEmpty">No files attached yet.</div>
+    </div>
+  </div>
+</div>
+
 <script>
 const SUPABASE_URL = 'https://lutkzzxsmudnfaitqlfy.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx1dGt6enhzbXVkbmZhaXRxbGZ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgzNDIxODIsImV4cCI6MjEwMzkxODE4Mn0.S_PLikyoMfddXc5pG74Oy0vywjdlk0uxNa126i9_7Nc';
@@ -285,7 +324,7 @@ async function startHeartbeat(){
 
 /* ---------- SHIPMENTS: DATA ---------- */
 async function loadShipments(){
-  const { data, error } = await sb.from('shipments').select('*, profiles(username)').order('date',{ascending:false});
+  const { data, error } = await sb.from('shipments').select('*, profiles(username), shipment_attachments(count)').order('date',{ascending:false});
   if(error){ showToast('Could not load shipments'); return; }
   shipments = data || [];
   render();
@@ -294,6 +333,15 @@ async function loadShipments(){
 function subscribeRealtime(){
   sb.channel('shipments-changes')
     .on('postgres_changes', { event:'*', schema:'public', table:'shipments' }, ()=>loadShipments())
+    .subscribe();
+  sb.channel('attachments-changes')
+    .on('postgres_changes', { event:'*', schema:'public', table:'shipment_attachments' }, (payload)=>{
+      loadShipments();
+      const row = payload.new && payload.new.shipment_id ? payload.new.shipment_id : (payload.old && payload.old.shipment_id);
+      if(row && row === attachShipmentId && !document.getElementById('attachOverlay').classList.contains('hidden')){
+        loadAttachmentsList();
+      }
+    })
     .subscribe();
 }
 
@@ -465,6 +513,7 @@ function render(){
     const hkPct = total? Math.round((s.hk/total)*100):0;
     const appPct = total? Math.max(0,100-gzPct-hkPct):0;
     const author = s.profiles ? s.profiles.username : '—';
+    const fileCount = (s.shipment_attachments && s.shipment_attachments[0]) ? s.shipment_attachments[0].count : 0;
     const tr=document.createElement('tr');
     tr.innerHTML =
       '<td>'+fmtDate(s.date)+'</td>'+
@@ -475,9 +524,14 @@ function render(){
       '<td class="num">'+fmtNum(s.app_weight,1)+'<div class="subtd">GZ '+fmtNum(s.app_gz_weight,1)+'/HK '+fmtNum(s.app_hk_weight,1)+'</div></td>'+
       '<td class="num">'+fmtNum(total)+'</td><td class="num">'+fmtNum(weight,1)+'</td>'+
       '<td class="subtd">'+escapeHtml(author)+'</td>'+
-      '<td class="actions-cell"><button class="icon-btn edit" data-id="'+s.id+'">Edit</button><button class="icon-btn del" data-id="'+s.id+'">Delete</button></td>';
+      '<td class="actions-cell">'+
+        '<button class="icon-btn files" data-id="'+s.id+'">Files'+(fileCount?' ('+fileCount+')':'')+'</button>'+
+        '<button class="icon-btn edit" data-id="'+s.id+'">Edit</button>'+
+        '<button class="icon-btn del" data-id="'+s.id+'">Delete</button>'+
+      '</td>';
     tbody.appendChild(tr);
   });
+  tbody.querySelectorAll('.files').forEach(b=>b.addEventListener('click',()=>openAttachments(b.dataset.id)));
   tbody.querySelectorAll('.edit').forEach(b=>b.addEventListener('click',()=>startEdit(b.dataset.id)));
   tbody.querySelectorAll('.del').forEach(b=>b.addEventListener('click',()=>deleteShipment(b.dataset.id)));
   renderStats();
@@ -503,6 +557,103 @@ async function deleteShipment(id){
   showToast('Shipment deleted');
   await loadShipments();
 }
+
+/* ---------- ATTACHMENTS ---------- */
+let attachShipmentId = null;
+
+function fmtBytes(n){
+  if(!n && n!==0) return '';
+  if(n < 1024) return n+' B';
+  if(n < 1024*1024) return (n/1024).toFixed(1)+' KB';
+  return (n/(1024*1024)).toFixed(1)+' MB';
+}
+
+async function openAttachments(shipmentId){
+  attachShipmentId = shipmentId;
+  const s = shipments.find(x=>x.id===shipmentId);
+  document.getElementById('attachTitle').textContent = 'Files';
+  document.getElementById('attachSubtitle').textContent = s ? (fmtDate(s.date)+(s.reference?' · '+s.reference:'')) : '';
+  document.getElementById('attachFileInput').value = '';
+  document.getElementById('attachUploadStatus').textContent = '';
+  document.getElementById('attachOverlay').classList.remove('hidden');
+  await loadAttachmentsList();
+}
+
+function closeAttachments(){
+  document.getElementById('attachOverlay').classList.add('hidden');
+  attachShipmentId = null;
+}
+document.getElementById('attachCloseBtn').addEventListener('click', closeAttachments);
+document.getElementById('attachOverlay').addEventListener('click', (e)=>{
+  if(e.target.id === 'attachOverlay') closeAttachments();
+});
+
+async function loadAttachmentsList(){
+  const list = document.getElementById('attachList');
+  const empty = document.getElementById('attachEmpty');
+  const { data, error } = await sb.from('shipment_attachments')
+    .select('*, profiles(username)')
+    .eq('shipment_id', attachShipmentId)
+    .order('created_at', {ascending:false});
+  if(error){ showToast('Could not load files'); return; }
+  list.innerHTML = '';
+  empty.classList.toggle('hidden', data.length>0);
+  data.forEach(a=>{
+    const li = document.createElement('li');
+    li.className = 'attach-row';
+    const who = a.profiles ? a.profiles.username : '—';
+    li.innerHTML =
+      '<div><div class="attach-name">'+escapeHtml(a.file_name)+'</div>'+
+      '<div class="attach-meta">'+fmtBytes(a.file_size)+' · '+who+' · '+new Date(a.created_at).toLocaleDateString()+'</div></div>'+
+      '<div class="attach-actions">'+
+        '<button class="icon-btn dl" data-path="'+encodeURIComponent(a.storage_path)+'" data-name="'+encodeURIComponent(a.file_name)+'">Download</button>'+
+        '<button class="icon-btn del" data-id="'+a.id+'" data-path="'+encodeURIComponent(a.storage_path)+'">Delete</button>'+
+      '</div>';
+    list.appendChild(li);
+  });
+  list.querySelectorAll('.dl').forEach(b=>b.addEventListener('click', ()=>downloadAttachment(decodeURIComponent(b.dataset.path))));
+  list.querySelectorAll('.del').forEach(b=>b.addEventListener('click', ()=>deleteAttachment(b.dataset.id, decodeURIComponent(b.dataset.path))));
+}
+
+async function downloadAttachment(path){
+  const { data, error } = await sb.storage.from('shipment-attachments').createSignedUrl(path, 60);
+  if(error || !data){ showToast('Could not open file'); return; }
+  window.open(data.signedUrl, '_blank');
+}
+
+async function deleteAttachment(id, path){
+  if(!confirm('Delete this file? This cannot be undone.')) return;
+  await sb.storage.from('shipment-attachments').remove([path]);
+  const { error } = await sb.from('shipment_attachments').delete().eq('id', id);
+  if(error){ showToast('Delete failed'); return; }
+  showToast('File deleted');
+  await loadAttachmentsList();
+  await loadShipments();
+}
+
+document.getElementById('attachFileInput').addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  if(!file || !attachShipmentId) return;
+  const statusEl = document.getElementById('attachUploadStatus');
+  statusEl.textContent = 'Uploading…';
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const path = attachShipmentId+'/'+Date.now()+'_'+safeName;
+  const { error: upErr } = await sb.storage.from('shipment-attachments').upload(path, file);
+  if(upErr){ statusEl.textContent = ''; showToast('Upload failed: '+upErr.message); e.target.value=''; return; }
+  const { error: insErr } = await sb.from('shipment_attachments').insert({
+    shipment_id: attachShipmentId,
+    file_name: file.name,
+    storage_path: path,
+    file_size: file.size,
+    uploaded_by: me.id
+  });
+  if(insErr){ statusEl.textContent = ''; showToast('Upload failed'); e.target.value=''; return; }
+  statusEl.textContent = '';
+  e.target.value = '';
+  showToast('File uploaded');
+  await loadAttachmentsList();
+  await loadShipments();
+});
 
 function renderStats(){
   const all = shipments;
